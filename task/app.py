@@ -89,7 +89,6 @@ class GeneralPurposeAgentApplication(ChatCompletion):
                                        response=response)
 
 
-# TODO:
 # 1. Create DIALApp
 # 2. Create GeneralPurposeAgentApplication
 # 3. Add to created DIALApp chat_completion with:
