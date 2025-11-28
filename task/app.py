@@ -55,6 +55,7 @@ class GeneralPurposeAgentApplication(ChatCompletion):
         base_tools.append(RagTool(endpoint=DIAL_ENDPOINT,
                                   deployment_name=DEPLOYMENT_NAME,
                                   document_cache=DocumentCache.create()))
+        base_tools.append(ImageGenerationTool(endpoint=DIAL_ENDPOINT))
         # base_tools: list[BaseTool] = [ImageGenerationTool(endpoint=DIAL_ENDPOINT),
         #                              FileContentExtractionTool(endpoint=DIAL_ENDPOINT),
         #                              RagTool(endpoint=DIAL_ENDPOINT,
