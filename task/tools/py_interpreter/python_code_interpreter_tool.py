@@ -31,13 +31,19 @@ class PythonCodeInterpreterTool(BaseTool):
         :param tool_name: it must be actual name of tool that executes code. It is 'execute_code'.
             https://github.com/khshanovskyi/mcp-python-code-interpreter/blob/main/interpreter/server.py#L303
         """
-        #TODO:
         # 1. Set dial_endpoint
         # 2. Set mcp_client
         # 3. Set _code_execute_tool: Optional[MCPToolModel] as None at start, then iterate through `mcp_tool_models` and
         #    if any of tool model has the same same as `tool_name` then set _code_execute_tool as tool model
         # 4. If `_code_execute_tool` is null then raise error (We cannot set up PythonCodeInterpreterTool without tool that executes code)
-        raise NotImplementedError()
+        self.dial_endpoint = dial_endpoint
+        self.mcp_client = mcp_client
+        self._code_execute_tool: Optional[MCPToolModel] = None
+        for tool_model in mcp_tool_models:
+            if tool_model.name == tool_name:
+                self._code_execute_tool = tool_model
+        if self._code_execute_tool is None:
+            raise ValueError(f"Tool with name {tool_name} not found in MCP tools")
 
     @classmethod
     async def create(
@@ -47,34 +53,37 @@ class PythonCodeInterpreterTool(BaseTool):
             dial_endpoint: str,
     ) -> 'PythonCodeInterpreterTool':
         """Async factory method to create PythonCodeInterpreterTool"""
-        #TODO:
         # 1. Create MCPClient
         # 2. Get tools
         # 3. Create PythonCodeInterpreterTool instance and return it
-        raise NotImplementedError()
+        mcp_client = await MCPClient.create(mcp_server_url=mcp_url)
+        mcp_tools = await mcp_client.get_tools()
+        return cls(mcp_client=mcp_client,
+                   mcp_tool_models=mcp_tools,
+                   tool_name=tool_name,
+                   dial_endpoint=dial_endpoint)
 
     @property
     def show_in_stage(self) -> bool:
-        # TODO: set as False since we will have custom variant of representation in Stage
-        raise NotImplementedError()
+        # set as False since we will have custom variant of representation in Stage
+        return False
 
     @property
     def name(self) -> str:
-        # TODO: provide `_code_execute_tool` name
-        raise NotImplementedError()
+        # provide `_code_execute_tool` name
+        return self._code_execute_tool.name
 
     @property
     def description(self) -> str:
-        # TODO: provide `_code_execute_tool` description
-        raise NotImplementedError()
+        # provide `_code_execute_tool` description
+        return self._code_execute_tool.description
 
     @property
     def parameters(self) -> dict[str, Any]:
-        # TODO: provide `_code_execute_tool` parameters
-        raise NotImplementedError()
+        # provide `_code_execute_tool` parameters
+        return self._code_execute_tool.parameters
 
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
-        #TODO:
         # 1. Load arguments with `json`
         # 2. Get `code` from arguments
         # 3. Get `session_id` from arguments (it is optional parameter, use get method)
@@ -101,10 +110,67 @@ class PythonCodeInterpreterTool(BaseTool):
         #           - Prepare URL to upload downloaded file: f"files/{(files_home / file_name).as_posix()}"
         #           - Upload file with DIAL client
         #           - Prepare Attachment with url, type (mime_type), and title (file_name)
-        #           - Add attachment to stage and also add this attachment to choice (it will be chown in both stage and choice)
+        #           - Add attachment to stage and also add this attachment to choice (it will be shown in both stage and choice)
         #       - Add to execution_result json addition
         # 12. Check if execution_result output present and if yes iterate through all output results and cut it length
         #     to 1000 chars, it is needed to avoid high costs and context window overload
         # 13. Append to stage response f"```json\n\r{execution_result.model_dump_json(indent=2)}\n\r```\n\r"
         # 14. Return execution result as string (model_dump_json method)
-        raise NotImplementedError()
+        arguments = json.loads(tool_call_params.tool_call.function.arguments)
+        code = arguments.get("code", "")
+        session_id = arguments.get("session_id", None)
+        stage = tool_call_params.stage
+        stage.append_content("## Request arguments: \n")
+        stage.append_content(f"```python\n\r{code}\n\r```\n\r")
+        if session_id is not None and session_id != 0:
+            stage.append_content(f"**session_id**: {session_id}\n\r")
+        else:
+            stage.append_content("New session will be created\n\r")
+        tool_result = await self.mcp_client.call_tool(
+            tool_name=self._code_execute_tool.name,
+            tool_args=arguments
+        )
+        execution_result_json = json.loads(tool_result)
+        execution_result = _ExecutionResult.model_validate(execution_result_json)
+        if execution_result.files and len(execution_result.files) > 0:
+            dial_client = Dial(
+                base_url=self.dial_endpoint,
+                api_key=tool_call_params.api_key,
+            )
+            files_home = await dial_client.files.get_appdata_home()
+
+            for file in execution_result.files:
+                file_name = file.name
+                mime_type = file.mime_type
+
+                resource_bytes = await self.mcp_client.get_resource(uri=file.url)
+
+                if mime_type.startswith("text/") or mime_type in ['application/json', 'application/xml']:
+                    file_bytes = resource_bytes.encode('utf-8')
+                else:
+                    file_bytes = base64.b64decode(resource_bytes)
+
+                upload_url = f"files/{(files_home / file_name).as_posix()}"
+
+                dial_client.files.upload(
+                    url=upload_url,
+                    file_bytes=file_bytes
+                )
+
+                attachment = Attachment(
+                    url=StrictStr(upload_url),
+                    type=StrictStr(mime_type),
+                    title=StrictStr(file_name)
+                )
+
+                stage.add_attachment(attachment)
+                tool_call_params.choice.add_attachment(attachment)
+
+        if execution_result.output:
+            for i in range(len(execution_result.output)):
+                if len(execution_result.output[i]) > 1000:
+                    execution_result.output[i] = execution_result.output[i][:1000] + "...[truncated]"
+
+        stage.append_content(f"```json\n\r{execution_result.model_dump_json(indent=2)}\n\r```\n\r")
+
+        return StrictStr(execution_result.model_dump_json())

@@ -16,10 +16,10 @@ from task.tools.rag.document_cache import DocumentCache
 from task.tools.rag.rag_tool import RagTool
 
 DIAL_ENDPOINT = os.getenv('DIAL_ENDPOINT', "http://localhost:8080")
-DEPLOYMENT_NAME = os.getenv('DEPLOYMENT_NAME', 'gpt-4o')
+# DEPLOYMENT_NAME = os.getenv('DEPLOYMENT_NAME', 'gpt-4o')
 
 
-# DEPLOYMENT_NAME = os.getenv('DEPLOYMENT_NAME', 'claude-sonnet-3-7')
+DEPLOYMENT_NAME = os.getenv('DEPLOYMENT_NAME', 'claude-sonnet-3-7')
 
 
 class GeneralPurposeAgentApplication(ChatCompletion):
@@ -56,15 +56,9 @@ class GeneralPurposeAgentApplication(ChatCompletion):
                                   deployment_name=DEPLOYMENT_NAME,
                                   document_cache=DocumentCache.create()))
         base_tools.append(ImageGenerationTool(endpoint=DIAL_ENDPOINT))
-        # base_tools: list[BaseTool] = [ImageGenerationTool(endpoint=DIAL_ENDPOINT),
-        #                              FileContentExtractionTool(endpoint=DIAL_ENDPOINT),
-        #                              RagTool(endpoint=DIAL_ENDPOINT,
-        #                                      deployment_name=DEPLOYMENT_NAME,
-        #                                     document_cache=DocumentCache.create()),
-        #                              PythonCodeInterpreterTool.create(mcp_url="http://localhost:8050/mcp",
-        #                                                               tool_name="execute_code",
-        #                                                               dial_endpoint=DIAL_ENDPOINT)
-        #                              ]
+        base_tools.append(await PythonCodeInterpreterTool.create(mcp_url="http://localhost:8050/mcp",
+                                                           tool_name="execute_code",
+                                                           dial_endpoint=DIAL_ENDPOINT))
         # 6. Extend tools with MCP tools from `http://localhost:8051/mcp` (use method `_get_mcp_tools`)
         mcp_tools = await self._get_mcp_tools(url="http://localhost:8051/mcp")
         base_tools.extend(mcp_tools)
