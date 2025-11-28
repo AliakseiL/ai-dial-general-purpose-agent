@@ -113,7 +113,7 @@
 ## Step 6
 **Time to add Code Interpreter**
 
-LLMs cannot perform real calculations, they are 'assuming'. Also, sometimes we need to analyze data щк make some chart. 
+LLMs cannot perform real calculations, they are 'assuming'. Also, sometimes we need to analyze data or make some chart. 
 Because of that ChatGPT has Python Code Interpreter that is running on the ChatGPT side, in Claude it is JS Code Interpreter that is running in browser.
 We will try to implement similar to ChatGPT Python Code Interpreter tool. 
 
